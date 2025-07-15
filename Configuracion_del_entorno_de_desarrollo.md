@@ -13,14 +13,25 @@ Este documento tiene como propósito ofrecer una guía detallada, práctica y co
 
 ### 1.1 Instalación de OpenJDK 21
 
-- Descarga desde: [https://jdk.java.net/21/](https://jdk.java.net/21/)
-- Instálalo y configura las variables de entorno:
+- Descarga desde: [[https://jdk.java.net/21/](https://jdk.java.net/21/)](https://jdk.java.net/archive/)
+  <img width="975" height="872" alt="image" src="https://github.com/user-attachments/assets/9d0b1cea-4d5e-4c20-90cd-cca77f02d71d" />
+- Crea una carpeta con el nombre Java en c:\Arrchivos de Programa o donde consideres y copia la carpeta descomprimida del JDK
+  <img width="932" height="113" alt="image" src="https://github.com/user-attachments/assets/26e47249-9790-4473-866b-9c572d9f5e72" />
+
+- Configurar las variables de entorno:
 
 #### Windows
 
 1. Crear una variable de entorno llamada `JAVA_HOME` apuntando al directorio donde está instalado el JDK.
-2. Añadir `%JAVA_HOME%\bin` al `PATH`.
+   <img width="1144" height="724" alt="image" src="https://github.com/user-attachments/assets/6685b4c3-707e-428d-b407-cd031d9c7054" />
 
+2. Añadir `%JAVA_HOME%\bin` al `PATH`.
+<img width="768" height="730" alt="image" src="https://github.com/user-attachments/assets/f144cb06-3fdf-4cf3-b8a2-444fd4d328de" />
+
+3.  Verificar la versión de Java JDK y JRE
+   <img width="868" height="213" alt="image" src="https://github.com/user-attachments/assets/ab8c2646-7b30-4644-81b0-c8c0b4551312" />
+Como puede observar se muestra la versión del JDK, esto significa que ya podemos desarrollar aplicaciones en JAVA, en caso de no reconocer el comando, debe reiniciar el equipo para que se actualicen las variables de entorno.
+   
 #### Linux/Mac
 
 ```bash
