@@ -64,11 +64,57 @@ En resumen, Spring Security se encarga de todo el "andamiaje" de la seguridad, m
 ```
 ## 2. Definir entidades de Usuario y Role
 Estas entidades ya se tienen creadas en el proyecto
-## 3. Crear repositorios para usuario y role
+
+Entidad Role
+```java
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Entity
+@Table(name = "roles", schema = "public", catalog = "orders")
+public class Role implements Serializable {
+    @Serial
+    private static final long serialVersionUID = 1L;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    @Column(name = "nombre", nullable = false, length = 50)
+    private String nombre;
+}
+```
+Entidad Usuario
+```java
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Entity
+@Table(name = "usuarios", schema = "public", catalog = "orders")
+public class Usuario implements Serializable {
+    @Serial
+    private static final long serialVersionUID = 1L;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    @Column(name = "nombre", nullable = false, length = 80)
+    private String nombre;
+    @Column(name = "username", nullable = false, length = 30)
+    private String username;
+    @Column(name = "password", nullable = false, length = 250)
+    private String password;
+    @Column(name = "activo", columnDefinition = "boolean default true")
+    private boolean activo;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "role_id", nullable = false, referencedColumnName = "id")
+    private Role role;
+}
+```
+## 3. Crear repositorios para Role y Usuario
 En el package **repository** crea el repositorio UserRepository
 ```java
 public interface UserRepository extends JpaRepository<Usuario, Long> {
-    Optional<Usuario> findByUsuario(String usuario);
+    Optional<Usuario> findByUsername(String username);
 }
 ```
 También crea el repositorio **RoleRepository**
@@ -77,281 +123,171 @@ public interface RoleRepository extends JpaRepository<Role, Long> {
     Optional<Role> findByNombre(String nombre);
 }
 ```
-
-## 4. Crear servicio de UserDetailsService
-El servicio UserDetailsService se encarga de cargar al usuario por su nombre de usuario. Aquí, adaptamos el código para usar la entidad Usuario y su relación con Role.
+## 4. Crear clase de configuración SecurityConfig
+En esta clase se crea el bean securityFilterChain, para filtrar el acceso a los endpoints de la API
 ```java
-import com.tuproyecto.repositorios.UserRepository;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
-import org.springframework.stereotype.Service;
+@Configuration
+@EnableWebSecurity
+@RequiredArgsConstructor
+public class SecurityConfig {
 
-import java.util.Collections;
-
-@Service
-public class CustomUserDetailsService implements UserDetailsService {
-
-    private final UserRepository userRepository;
-
-    public CustomUserDetailsService(UserRepository userRepository) {
-        this.userRepository = userRepository;
+    //Beans para filtrar el acceso a rutas publicas y protegidas
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception{
+        return http
+                .csrf(csrf -> csrf.disable()
+                )
+                .authorizeHttpRequests(auth ->
+                        auth
+                            .requestMatchers("/api/auth/**","/api/menus/**").permitAll()
+                                .anyRequest().authenticated()
+                )
+                .formLogin(Customizer.withDefaults())
+                .build();
     }
+
+}
+
+```
+Mas adelante se completará programación de esta clase
+
+## 4. Crear servicio de jwtService
+El servicio implementa UserDetailsService que carga el usuario por su nombre de usuario. Aquí, adaptamos el código para usar la entidad Usuario y su relación con Role. Además se crean métodos para generar el token, determinar si es válido
+
+**Nota:** Crear en el application.properties
+```xml
+jwt.secret=586E3272357538782F413F4428472B4B6250655368566B597033733676397924
+jwt.expiration=86400000
+```
+puedes generarla con openSSH
+
+servicio JWT con métodos para generar el token, extraer username, claims, determinar si es válido
+```java
+@Service
+@RequiredArgsConstructor
+@Transactional
+public class JwtService implements UserDetailsService {
+
+    @Autowired
+    private UserRepository userRepository;
+    //obtenemos el valor de las propiedades definidas en application.properties
+    @Value("${jwt.secret}")
+    private String jwtSecret;
+    @Value("${jwt.expiration}")
+    private long jwtExpiration;
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        // Busca al usuario en la base de datos por su nombre de usuario
-        var usuario = userRepository.findByUsuario(username)
-                .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado: " + username));
-
-        // Retorna un objeto UserDetails de Spring Security, usando el rol de la entidad
-        return new org.springframework.security.core.userdetails.User(
-                usuario.getUsuario(),
-                usuario.getPassword(),
-                Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + usuario.getRole().getNombre()))
-        );
+        Usuario user = userRepository.findByUsername(username)
+                .orElseThrow(() ->
+                        new UsernameNotFoundException("Usuario no encontrado: " + username));
+        return User.builder()
+                .username(user.getUsername())
+                .password(user.getPassword())
+                .roles(user.getRole().getNombre())
+                .build();
     }
-}
-```
-**Nota:** Crear en el application.properties
-```xml
-application.security.jwt.secret-key=tu_clave_secreta_super_larga_y_segura_de_al_menos_32_bytes
-```
-puedes generarla con ssh
 
-## 5. Implementar serivicio de JWT con extraClaims
-Aquí está el cambio más importante. Modificamos el método generateToken para que reciba la entidad Usuario y construya el payload del JWT con la información requerida, excluyendo la contraseña
-```java
-import com.tuproyecto.entidades.Usuario;
-import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
-import io.jsonwebtoken.io.Decoders;
-import io.jsonwebtoken.security.Keys;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.stereotype.Service;
-import java.security.Key;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.function.Function;
+    //metodo para generar el token
+    public String generateToken(UserDetails userDetails){
+        //Obtenemos el usuario para agregar información extra al token
+        Usuario user = userRepository.findByUsername(userDetails.getUsername())
+                .orElseThrow(() ->
+                        new UsernameNotFoundException("Usuario no encontrado: " +
+                                userDetails.getUsername()));
+        //creamos un HashMap para agregar información extra
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("userId", user.getId());
+        claims.put("nombre", user.getNombre());
+        claims.put("activo", user.isActivo());
+        claims.put("role", user.getRole().getNombre());
 
-@Service
-public class JwtService {
-
-    @Value("${application.security.jwt.secret-key}")
-    private String secretKey;
-
-    // Nuevo método para generar token con claims personalizadas de la entidad Usuario
-    public String generateToken(Usuario usuario) {
-        Map<String, Object> extraClaims = new HashMap<>();
-        extraClaims.put("id", usuario.getId());
-        extraClaims.put("nombre", usuario.getNombre());
-        extraClaims.put("usuario", usuario.getUsuario());
-        extraClaims.put("email", usuario.getEmail());
-        extraClaims.put("role", usuario.getRole().getNombre());
-
-        return Jwts
-                .builder()
-                .setClaims(extraClaims)
-                .setSubject(usuario.getUsuario()) // El "subject" del token sigue siendo el nombre de usuario
-                .setIssuedAt(new Date(System.currentTimeMillis()))
-                .setExpiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 24)) // 24 horas de validez
-                .signWith(getSignInKey(), SignatureAlgorithm.HS256)
+        return Jwts.builder()
+                .subject(userDetails.getUsername())
+                .claims(claims).issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + jwtExpiration))
+                .signWith(SignatureAlgorithm.HS256, jwtSecret.getBytes())
                 .compact();
     }
 
-    // El resto de los métodos (extractUsername, extractClaim, etc.) se mantienen igual
-    public String extractUsername(String token) {
+    public boolean isTokenValid(String token, UserDetails userDetails){
+        final String username = extractUsername(token);
+        return username.equals(userDetails.getUsername()) && !isTokenExpired(token);
+    }
+
+    private String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
     }
 
-    public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
+    private <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
         final Claims claims = extractAllClaims(token);
         return claimsResolver.apply(claims);
     }
 
     private Claims extractAllClaims(String token) {
-        return Jwts
-                .parserBuilder()
-                .setSigningKey(getSignInKey())
-                .build()
-                .parseClaimsJws(token)
-                .getBody();
+        JwtParser jwtParser = Jwts.parser()
+                .setSigningKey(jwtSecret.getBytes())
+                .build();
+        return jwtParser.parseClaimsJws(token).getPayload();
     }
 
-    public boolean isTokenValid(String token, UserDetails userDetails) {
-        final String username = extractUsername(token);
-        return (username.equals(userDetails.getUsername())) && !isTokenExpired(token);
-    }
-
-    private boolean isTokenExpired(String token) {
-        return extractExpiration(token).before(new Date());
-    }
-
-    private Date extractExpiration(String token) {
-        return extractClaim(token, Claims::getExpiration);
-    }
-
-    private Key getSignInKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(secretKey);
-        return Keys.hmacShaKeyFor(keyBytes);
+    public boolean isTokenExpired(String token){
+        return extractClaim(token, Claims::getExpiration).before(new Date());
     }
 }
 ```
-## 6. Crear filtro de autenticación JWT
-Este filtro se encarga de interceptar las peticiones y validar el token. El código es muy similar al anterior, ya que el JwtService y el UserDetailsService se encargarán de la lógica de los claims y la autenticación. El filtro simplemente usa estos servicios.
+## 5. Crear filtro de autenticación JWT
+Este filtro se encarga de interceptar las peticiones y validar el token. El código es muy similar al anterior, ya que el JwtService y el UserDetailsService se encargarán de la lógica de los claims y la autenticación. El filtro simplemente usa estos servicios. crear en el package security la clase JwtAuthenticationFilter
 ```java
 @Component
-public class JwtAuthFilter extends OncePerRequestFilter {
-
-    private final JwtService jwtService;
-    private final UserDetailsService userDetailsService;
-
-    public JwtAuthFilter(JwtService jwtService, UserDetailsService userDetailsService) {
-        this.jwtService = jwtService;
-        this.userDetailsService = userDetailsService;
-    }
+public class JwtAuthenticationFilter extends OncePerRequestFilter {
+    @Autowired
+    private JwtService jwtService;
+    @Autowired
+    private UserDetailsService userDetailsService;
 
     @Override
-    protected void doFilterInternal(
-        @NonNull HttpServletRequest request,
-        @NonNull HttpServletResponse response,
-        @NonNull FilterChain filterChain
-    ) throws ServletException, IOException {
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain)
+            throws ServletException, IOException {
         final String authHeader = request.getHeader("Authorization");
-        final String jwt;
+        final String jwtToken;
         final String username;
 
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            filterChain.doFilter(request, response);
+        if(authHeader == null || !authHeader.startsWith("Bearer ")){
+            filterChain.doFilter(request,response);
             return;
         }
 
-        jwt = authHeader.substring(7);
-        username = jwtService.extractUsername(jwt);
+        jwtToken = authHeader.substring(7); //elimina el prefijo "Bearer"
+        username = jwtService.extractUsername(jwtToken); //extrae el username del token
 
-        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            UserDetails userDetails = this.userDetailsService.loadUserByUsername(username);
+        if(username != null &&
+                SecurityContextHolder.getContext().getAuthentication() == null){
 
-            if (jwtService.isTokenValid(jwt, userDetails)) {
-                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                        userDetails,
-                        null,
-                        userDetails.getAuthorities()
-                );
-                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+            UserDetails userDetails = jwtService.loadUserByUsername(username);
+            if(jwtService.isTokenValid(jwtToken, userDetails)){
+                Claims claims = jwtService.extractAllClaims(jwtToken);
+                //extraemmos el rol y lo convertimos a authority
+                String role = claims.get("role", String.class);
+                List<GrantedAuthority> authorities =
+                        List.of(new SimpleGrantedAuthority(role));
+                UsernamePasswordAuthenticationToken authToken =
+                        new UsernamePasswordAuthenticationToken(
+                                userDetails,null, authorities
+                        );
                 SecurityContextHolder.getContext().setAuthentication(authToken);
             }
         }
         filterChain.doFilter(request, response);
     }
+
 }
 ```
 
-## 7. Programar controlador de autenticación
-El controlador maneja el registro y el login. El método de registro ahora asigna un rol predeterminado (tendrías que asegurarte de que este rol exista en tu base de datos) y el método de login utiliza la versión actualizada del JwtService para generar el token con los extraClaims
-```java
-@RestController
-@RequestMapping("/api/auth")
-public class AuthController {
+## 6. Programar DTOs para registro y autenticación de usuarios
 
-    private final UserRepository userRepository;
-    private final RoleRepository roleRepository;
-    private final PasswordEncoder passwordEncoder;
-    private final JwtService jwtService;
-    private final AuthenticationManager authenticationManager;
-
-    public AuthController(UserRepository userRepository, RoleRepository roleRepository,
-                          PasswordEncoder passwordEncoder, JwtService jwtService,
-                          AuthenticationManager authenticationManager) {
-        this.userRepository = userRepository;
-        this.roleRepository = roleRepository;
-        this.passwordEncoder = passwordEncoder;
-        this.jwtService = jwtService;
-        this.authenticationManager = authenticationManager;
-    }
-
-    @PostMapping("/register")
-    public ResponseEntity<String> registerUser(@RequestBody Usuario nuevoUsuario) {
-        // Asegúrate de que el rol exista en la base de datos
-        Optional<Role> roleOptional = roleRepository.findByNombre("USER");
-        if (roleOptional.isEmpty()) {
-            return ResponseEntity.badRequest().body("El rol 'USER' no existe en la base de datos.");
-        }
-        
-        nuevoUsuario.setPassword(passwordEncoder.encode(nuevoUsuario.getPassword()));
-        nuevoUsuario.setActive(true);
-        nuevoUsuario.setRole(roleOptional.get());
-        userRepository.save(nuevoUsuario);
-        return ResponseEntity.ok("Registro exitoso!");
-    }
-
-    @PostMapping("/login")
-    public ResponseEntity<String> authenticateUser(@RequestBody LoginRequest loginRequest) {
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(loginRequest.getUsuario(), loginRequest.getPassword())
-        );
-
-        // Si la autenticación es exitosa, buscamos al usuario para generar el token
-        Usuario usuario = userRepository.findByUsuario(loginRequest.getUsuario()).orElseThrow();
-        String jwtToken = jwtService.generateToken(usuario);
-        return ResponseEntity.ok(jwtToken);
-    }
-}
-```
-
-## 8. Configuración de Spring Security
-Finalmente, la configuración de Spring Security queda similar a la anterior, pero ahora se integra con el AuthenticationProvider y el PasswordEncoder para un manejo correcto de las credenciales.
-```java
-@Configuration
-@EnableWebSecurity
-public class SecurityConfig {
-
-    private final JwtAuthFilter jwtAuthFilter;
-    private final CustomUserDetailsService userDetailsService;
-
-    public SecurityConfig(JwtAuthFilter jwtAuthFilter, CustomUserDetailsService userDetailsService) {
-        this.jwtAuthFilter = jwtAuthFilter;
-        this.userDetailsService = userDetailsService;
-    }
-
-    @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        http
-            .csrf(csrf -> csrf.disable())
-            .authorizeHttpRequests(authorize -> authorize
-                .requestMatchers("/api/auth/**").permitAll()
-                .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                .requestMatchers("/api/user/**").hasAnyRole("USER", "ADMIN")
-                .anyRequest().authenticated()
-            )
-            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .authenticationProvider(authenticationProvider())
-            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
-
-        return http.build();
-    }
-
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
-
-    @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
-        return config.getAuthenticationManager();
-    }
-
-    @Bean
-    public AuthenticationProvider authenticationProvider() {
-        DaoAuthenticationProvider authProvider = new DaoAuthenticationProvider();
-        authProvider.setUserDetailsService(userDetailsService);
-        authProvider.setPasswordEncoder(passwordEncoder());
-        return authProvider;
-    }
-}
-```
-
+## 7. Programar service para registro y autenticación
+## 8. Programar controlador AuthController
+## 9. Completar programación de SecurityConfig
