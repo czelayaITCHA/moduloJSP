@@ -180,9 +180,10 @@ public class JwtService implements UserDetailsService {
 
     @Autowired
     private UserRepository userRepository;
-    //obtenemos el valor de las propiedades definidas en application.properties
+
     @Value("${jwt.secret}")
     private String jwtSecret;
+
     @Value("${jwt.expiration}")
     private long jwtExpiration;
 
@@ -190,7 +191,7 @@ public class JwtService implements UserDetailsService {
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         Usuario user = userRepository.findByUsername(username)
                 .orElseThrow(() ->
-                        new UsernameNotFoundException("Usuario no encontrado: " + username));
+                        new UsernameNotFoundException("Usuario no encontrado: "+username));
         return User.builder()
                 .username(user.getUsername())
                 .password(user.getPassword())
@@ -198,14 +199,12 @@ public class JwtService implements UserDetailsService {
                 .build();
     }
 
-    //metodo para generar el token
     public String generateToken(UserDetails userDetails){
-        //Obtenemos el usuario para agregar información extra al token
+        //obtenemos el usuario para agregar información extra al token
         Usuario user = userRepository.findByUsername(userDetails.getUsername())
-                .orElseThrow(() ->
-                        new UsernameNotFoundException("Usuario no encontrado: " +
-                                userDetails.getUsername()));
-        //creamos un HashMap para agregar información extra
+                .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado: " +
+                        userDetails.getUsername()));
+        //creamos un HashMap para agregar informacion extra
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", user.getId());
         claims.put("nombre", user.getNombre());
@@ -219,13 +218,13 @@ public class JwtService implements UserDetailsService {
                 .signWith(SignatureAlgorithm.HS256, jwtSecret.getBytes())
                 .compact();
     }
-
+    //método para determinar si el token es válido
     public boolean isTokenValid(String token, UserDetails userDetails){
         final String username = extractUsername(token);
         return username.equals(userDetails.getUsername()) && !isTokenExpired(token);
     }
 
-    private String extractUsername(String token) {
+    public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
     }
 
@@ -234,18 +233,18 @@ public class JwtService implements UserDetailsService {
         return claimsResolver.apply(claims);
     }
 
-    private Claims extractAllClaims(String token) {
+    public Claims extractAllClaims(String token) {
         JwtParser jwtParser = Jwts.parser()
                 .setSigningKey(jwtSecret.getBytes())
                 .build();
-        return jwtParser.parseClaimsJws(token).getPayload();
+        return jwtParser.parseClaimsJws(token).getBody();
     }
 
+    //evaluar si el token ha expirado
     public boolean isTokenExpired(String token){
         return extractClaim(token, Claims::getExpiration).before(new Date());
     }
-}
-```
+}```
 ## 5. Crear filtro de autenticación JWT
 Este filtro se encarga de interceptar las peticiones y validar el token. El código es muy similar al anterior, ya que el JwtService y el UserDetailsService se encargarán de la lógica de los claims y la autenticación. El filtro simplemente usa estos servicios. crear en el package security la clase JwtAuthenticationFilter
 ```java
