@@ -297,7 +297,39 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 ```
 
 ## 6. Programar DTOs para registro y autenticación de usuarios
+Antes de crear los DTOs para registro, login y retorno del token, debes crear un package auth y dentro de el otro package dto, como se muestra en la siguiente imágen: 
 
+<img width="238" height="168" alt="image" src="https://github.com/user-attachments/assets/166421a1-4d17-42f2-adfe-ce5b840566b4" />
+
+Luego crea cada DTO con sus respectivos atributos
+
+RegisterDTO 
+```java
+@Data
+public class RegisterDTO {
+    private String nombre;
+    private String username;
+    private String password;
+    private boolean activo;
+    private Role role;
+}
+```
+LoginDTO
+```java
+@Data
+public class LoginDTO {
+    private String username;
+    private String password;
+}
+```
+JwtResponse
+```java
+@Data
+@AllArgsConstructor
+public class JwtResponse {
+    private String token;
+}
+```
 ## 7. Programar service para registro y autenticación
 ## 8. Programar controlador AuthController
 ## 9. Completar programación de SecurityConfig
