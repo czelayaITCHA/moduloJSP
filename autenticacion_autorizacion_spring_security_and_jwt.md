@@ -113,12 +113,18 @@ public class Usuario implements Serializable {
 ## 3. Crear repositorios para Role y Usuario
 En el package **repository** crea el repositorio UserRepository
 ```java
+@Repository
 public interface UserRepository extends JpaRepository<Usuario, Long> {
     Optional<Usuario> findByUsername(String username);
+    /*metodos para verificar en el controlador que no se registre un usuario con
+    mismo username y nombre */
+    boolean existsByUsername(String username);
+    boolean existsByNombre(String nombre);
 }
 ```
 También crea el repositorio **RoleRepository**
 ```java
+@Repository
 public interface RoleRepository extends JpaRepository<Role, Long> {
     Optional<Role> findByNombre(String nombre);
 }
@@ -146,6 +152,10 @@ public class SecurityConfig {
                 .build();
     }
 
+    @Bean
+    public PasswordEncoder passwordEncoder(){
+        return new BCryptPasswordEncoder();
+    }
 }
 
 ```
