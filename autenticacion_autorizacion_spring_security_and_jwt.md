@@ -331,5 +331,59 @@ public class JwtResponse {
 }
 ```
 ## 7. Programar service para registro y autenticación
+En el package security crea una clase de servicio con el nombre AuthService, para implementar lógica de registro y login de usuarios
+```java
+@Service
+@RequiredArgsConstructor
+public class AuthService {
+    private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
+
+    //metodo para registro de usuario
+    public JwtResponse register(RegisterDTO registerDTO){
+        Role role = roleRepository.findByNombre(registerDTO.getRole().getNombre())
+                .orElseThrow(() -> new RuntimeException("Rol no encontrado"));
+        //creamos una instancia (objeto) de Usuario
+        Usuario user = new Usuario();
+        user.setNombre(registerDTO.getNombre());
+        user.setUsername(registerDTO.getUsername());
+        user.setPassword(passwordEncoder.encode(registerDTO.getPassword()));
+        user.setActivo(registerDTO.isActivo());
+        user.setRole(registerDTO.getRole());
+        //guardamos el usuario
+        userRepository.save(user);
+
+        String token = jwtService.generateToken(
+                User.builder()
+                        .username(user.getUsername())
+                        .password(user.getPassword())
+                        .roles(role.getNombre())
+                        .build()
+        );
+        return new JwtResponse(token);
+    }
+
+    //metodo para autenticacion de usuario
+    public JwtResponse authenticate(LoginDTO dto){
+        Usuario user = userRepository.findByUsername(dto.getUsername())
+                .orElseThrow(() -> new RuntimeException("Credenciales inválidas"));
+        if(!passwordEncoder.matches(dto.getPassword(), user.getPassword())){
+            throw  new RuntimeException("Credenciales inválidas");
+        }
+
+        String token = jwtService.generateToken(
+                User.builder()
+                        .username(user.getUsername())
+                        .password(user.getPassword())
+                        .roles(user.getRole().getNombre())
+                        .build()
+        );
+        return new JwtResponse(token);
+    }
+
+}
+`` 
 ## 8. Programar controlador AuthController
 ## 9. Completar programación de SecurityConfig
