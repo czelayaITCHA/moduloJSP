@@ -384,6 +384,62 @@ public class AuthService {
     }
 
 }
-`` 
+```
 ## 8. Programar controlador AuthController
-## 9. Completar programación de SecurityConfig
+En el package **auth** crea el controlador AuthController, para programar los endpoint de register y login, como el código siguiente:
+```java
+@RestController
+@RequestMapping("/api/auth")
+@RequiredArgsConstructor
+public class AuthController {
+    @Autowired
+    private RoleRepository roleRepository;
+    @Autowired
+    private AuthService authService;
+    @Autowired
+    private UserRepository userRepository;
+
+    //endpoint para registro de usuarios
+    @PostMapping("/register")
+    public ResponseEntity<?> register(@RequestBody RegisterDTO dto){
+        Map<String, Object> response = new HashMap<>();
+        try{
+            if(userRepository.existsByUsername(dto.getUsername()) ||
+            userRepository.existsByNombre(dto.getNombre())){
+                response.put("message","Ya existe un usuario con este nombre y login");
+                return new ResponseEntity<>(response,HttpStatus.BAD_REQUEST);
+            }
+            authService.register(dto);
+            response.put("message","Usuario registrado correctamente...!");
+            return new ResponseEntity<>(response, HttpStatus.CREATED);
+        } catch (DataAccessException e) {
+            response.put("message", "Error al guardar el usuario");
+            response.put("error", e.getMessage());
+            return new ResponseEntity<>(response, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    //endpoint para autenticar usuarios
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody LoginDTO dto){
+        try{
+            return ResponseEntity.ok(authService.authenticate(dto));
+        }catch (Exception e){
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .build();
+        }
+    }
+}
+```
+## 9. Realizar pruebas de registro y login en Postman
+incia el proyecto, en caso de errores debes corregir, haz pruebas como las que se muestran a continuación:
+
+### a. Prueba de registro de usuario
+<img width="1157" height="813" alt="image" src="https://github.com/user-attachments/assets/5c546371-24ca-4f7f-ae35-51d79ac09065" />
+
+### b. Prueba de login
+<img width="1155" height="814" alt="image" src="https://github.com/user-attachments/assets/c7e7110c-9414-4275-bb90-9987121d0be9" />
+
+
+
+## 10. Completar programación de SecurityConfig
