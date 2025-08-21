@@ -576,4 +576,4 @@ Hacer las pruebas de aquellos endpoints protegidos, por ejemplo http://localhost
 3. Hacer una petición a endpoints protegidos, por ejemplo para obtener todas las ordenes con el metodo http GET, se requiere autenticación (enviar un token válido), para ello en Postman en la pestaña de Authorizatión, seleccione en **Auth Type** --> Bearer Token y pegue el token generado en el punto anterior como se muestra en la siguiente imagen:
    <img width="1148" height="814" alt="image" src="https://github.com/user-attachments/assets/c88240a9-038a-484b-bcbf-8abbbe1be42b" />
 
-Como observará el endpoint anterior que está protegido, ahora se tiene acceso porque el token proporcionado es válido. Esto ha sido el proceso de implementación de registro, autenticación y autorización a una API desarrollada en Java Spring Boot 3, con Spring Security y JWT.
+Como observará el endpoint anterior que está protegido, ahora se tiene acceso porque el token proporcionado es válido. Esto ha sido el proceso de implementación de registro, autenticación de usuarios y autorización a una API desarrollada en Java Spring Boot 3, con Spring Security y JWT.
