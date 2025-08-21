@@ -439,6 +439,141 @@ incia el proyecto, en caso de errores debes corregir, haz pruebas como las que s
 ### b. Prueba de login
 <img width="1155" height="814" alt="image" src="https://github.com/user-attachments/assets/c7e7110c-9414-4275-bb90-9987121d0be9" />
 
-
-
 ## 10. Completar programación de SecurityConfig
+A nivel clase SecurityConfig, definir estos objetos
+
+```java
+ private final JwtService jwtService;
+ private final JwtAuthenticationFilter authenticationFilter;
+```
+En la clase SecurityConfig, crear el método @Bean, es una de las piezas clase en el flujo de Spring Security, principalmente obtiene datos del usuario y valida contraseñas
+
+```java
+ @Bean
+    public AuthenticationProvider authenticationProvider(){
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+        provider.setUserDetailsService(jwtService);
+        provider.setPasswordEncoder(passwordEncoder());
+        return provider;
+    }
+```
+
+crear el método @Bean que configura el AuthenticationManager, que es el componente central de Spring Security para la autenticación de usuarios. Su única función es devolver una instancia de AuthenticationManager obtenida directamente de la AuthenticationConfiguration. Es crucial porque es el responsable de gestionar todo el proceso de autenticación.
+```java
+ @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception{
+        return config.getAuthenticationManager();
+    }
+```
+Ahora se creará el método para configurar las reglas  de CORS (Cross-Origin Resource Sharing) para el acceso a la API. Esencialmente, le dice al servidor qué orígenes (dominios), métodos HTTP y encabezados puede aceptar de peticiones que provienen de un dominio diferente al suyo. Para ello debe crearse le método @Bean siguiente:
+
+```java
+ @Bean
+    CorsConfigurationSource corsConfigurationSource(){
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(List.of("http://localhost:5173")); //react
+        config.setAllowedMethods(List.of("GET","POST","PUT","DELETE","OPTIONS"));
+        config.setAllowCredentials(true);
+        config.setAllowedHeaders(Arrays.asList("Content-Type","Authorization"));
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return source;
+    }
+```
+Actualizar el filtro 
+```java
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http)
+            throws Exception{
+        return http
+                .csrf(csrf -> csrf.disable())
+                .authorizeHttpRequests(auth ->
+                        auth
+                                .requestMatchers("/api/auth/**").permitAll()
+                                .requestMatchers("/api/menus/**").permitAll()
+                                .anyRequest().authenticated()
+                )
+                .authenticationProvider(authenticationProvider()
+                ).cors(cors ->
+                        cors.configurationSource(corsConfigurationSource()))
+                .sessionManagement(sessionManager -> sessionManager
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+
+                .addFilterBefore(authenticationFilter,
+                        UsernamePasswordAuthenticationFilter.class)
+                .build();
+    } 
+```
+La clase completa SecurityConfig quedará así:
+
+```java
+@RequiredArgsConstructor
+@EnableWebSecurity
+@Configuration
+public class SecurityConfig {
+
+    private final JwtService jwtService;
+    private final JwtAuthenticationFilter authenticationFilter;
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http)
+            throws Exception{
+        return http
+                .csrf(csrf -> csrf.disable())
+                .authorizeHttpRequests(auth ->
+                        auth
+                                .requestMatchers("/api/auth/**").permitAll()
+                                .requestMatchers("/api/menus/**").permitAll()
+                                .anyRequest().authenticated()
+                )
+                .authenticationProvider(authenticationProvider()
+                ).cors(cors ->
+                        cors.configurationSource(corsConfigurationSource()))
+                .sessionManagement(sessionManager -> sessionManager
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+
+                .addFilterBefore(authenticationFilter,
+                        UsernamePasswordAuthenticationFilter.class)
+                .build();
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder(){
+        return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public AuthenticationProvider authenticationProvider(){
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+        provider.setUserDetailsService(jwtService);
+        provider.setPasswordEncoder(passwordEncoder());
+        return provider;
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception{
+        return config.getAuthenticationManager();
+    }
+
+    @Bean
+    CorsConfigurationSource corsConfigurationSource(){
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(List.of("http://localhost:5173")); //react
+        config.setAllowedMethods(List.of("GET","POST","PUT","DELETE","OPTIONS"));
+        config.setAllowCredentials(true);
+        config.setAllowedHeaders(Arrays.asList("Content-Type","Authorization"));
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return source;
+    }
+}
+```
+Hacer las pruebas de aquellos endpoints protegidos, por ejemplo http://localhost:8080/api/ordenes, para ello utilice Postman y haga lo siguiente para probar los endpoints:
+
+1. Hacer una peticion post al endpoint de login para obtener el token de autenticación, como en la siguiente imagen:
+   <img width="1154" height="811" alt="image" src="https://github.com/user-attachments/assets/20d018cb-ab29-4f9f-901a-ff3f5bbbaa73" />
+
+3. Hacer una petición a endpoints protegidos, por ejemplo para obtener todas las ordenes con el metodo http GET, se requiere autenticación (enviar un token válido), para ello en Postman en la pestaña de Authorizatión, seleccione en **Auth Type** --> Bearer Token y pegue el token generado en el punto anterior como se muestra en la siguiente imagen:
+   <img width="1148" height="814" alt="image" src="https://github.com/user-attachments/assets/c88240a9-038a-484b-bcbf-8abbbe1be42b" />
+
+Como observará el endpoint anterior que está protegido, ahora se tiene acceso porque el token proporcionado es válido. Esto ha sido el proceso de implementación de registro, autenticación y autorización a una API desarrollada en Java Spring Boot 3, con Spring Security y JWT.
