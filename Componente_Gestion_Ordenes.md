@@ -140,7 +140,212 @@ const MenuCard = ({ menu, onAdd }) => {
 export default MenuCard;
 
 ```
+### 4.2.- Crear componente OrderCart.jsx
+Panel lateral / drawer que muestra los items agregados, editar cantidad, eliminar, subtotal y botón para abrir confirmación. 
 
+```JavaScript
+import React from "react";
+import { FaTrash } from "react-icons/fa";
+import { IMAGES_URL } from "../../utils/config";
 
+const formatCurrency = (v) => `$${Number(v).toFixed(2)}`;
+
+const OrderCart = ({ items, onRemove, onUpdateQty, onOpenConfirm, total }) => {
+  return (
+    <aside className="bg-white rounded-xl shadow-lg p-4 w-full md:w-96">
+      <h3 className="text-lg font-bold text-slate-800 mb-2">Orden en construcción</h3>
+
+      {items.length === 0 ? (
+        <div className="text-slate-500">No hay productos. Añade desde el menú.</div>
+      ) : (
+        <ul className="divide-y">
+          {items.map((it) => (
+            <li key={it.menu.id} className="py-3 flex items-center gap-3">
+              <img
+                src={`${IMAGES_URL}${it.menu.urlImagen}` || "/images/no-image.png"}
+                alt={it.menu.nombre}
+                className="w-12 h-12 object-cover rounded"
+              />
+              <div className="flex-1">
+                <div className="flex justify-between items-center">
+                  <div className="font-medium text-slate-800">{it.menu.nombre}</div>
+                  <div className="text-slate-600 text-sm">{formatCurrency(it.precio)}</div>
+                </div>
+                <div className="mt-1 flex items-center gap-2">
+                  <button
+                    onClick={() => onUpdateQty(it.menu.id, Math.max(1, it.cantidad - 1))}
+                    className="px-2 py-0.5 rounded border"
+                    type="button"
+                    aria-label="disminuir"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    value={it.cantidad}
+                    min={1}
+                    onChange={(e) => onUpdateQty(it.menu.id, Math.max(1, Number(e.target.value || 1)))}
+                    className="w-16 text-center border rounded px-1"
+                  />
+                  <div className="text-sm text-slate-600">subtotal: {formatCurrency(it.subtotal)}</div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => onRemove(it.menu.id)}
+                className="text-red-600 p-2 hover:bg-red-50 rounded"
+                aria-label="eliminar"
+                type="button"
+              >
+                <FaTrash />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="mt-4">
+        <div className="flex justify-between items-center font-bold">
+          <div>Total</div>
+          <div className="text-blue-700 text-lg">{formatCurrency(total)}</div>
+        </div>
+
+        <button
+          onClick={onOpenConfirm}
+          disabled={items.length === 0}
+          className={`mt-3 w-full py-2 rounded-lg text-white ${items.length === 0 ? "bg-gray-300 cursor-not-allowed" : "bg-blue-700 hover:bg-blue-800"}`}
+          type="button"
+        >
+          Confirmar orden
+        </button>
+      </div>
+    </aside>
+  );
+};
+
+export default OrderCart;
+
+```
+### 4.3 Crear componente ConfirmOrderModal.jsx
+
+Modal para confirmar la orden: selecciona mesa y cliente (traídos del backend), muestra resumen, permite enviar orden. Devuelve la acción al padre (onConfirm(dto)).
+
+```JavaScript
+import React, { useEffect, useState } from "react";
+
+const ConfirmOrderModal = ({ visible, onClose, items, total, onConfirm, token, fetchMesas, fetchClientes }) => {
+  const [mesas, setMesas] = useState([]);
+  const [clientes, setClientes] = useState([]);
+  const [selectedMesa, setSelectedMesa] = useState(null);
+  const [selectedCliente, setSelectedCliente] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!visible) return;
+    (async () => {
+      try {
+        const [mesasRes, clientesRes] = await Promise.all([fetchMesas(token), fetchClientes(token)]);
+        setMesas(mesasRes || []);
+        setClientes(clientesRes || []);
+        if (mesasRes?.length) setSelectedMesa(mesasRes[0].id);
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
+  const handleConfirm = async () => {
+    if (!selectedMesa || !selectedCliente) {
+      alert("Selecciona mesa y cliente antes de confirmar.");
+      return;
+    }
+    const dto = {
+      // DTO shape similar a backend: clienteDTO, mesaDTO, usuarioDTO se setearán en backend según token,
+      // pero aquí mandamos lo mínimo requerido: cliente y mesa y detalleList
+      clienteDTO: { id: selectedCliente },
+      mesaDTO: { id: selectedMesa },
+      total: total,
+      detalleList: items.map((it) => ({
+        menuDTO: { id: it.menu.id },
+        cantidad: it.cantidad,
+        precio: it.precio,
+        subTotal: it.subtotal,
+      })),
+    };
+
+    setLoading(true);
+    try {
+      await onConfirm(dto);
+      onClose();
+    } catch (err) {
+      console.error(err);
+      alert("Error al crear la orden. Revisa la consola.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!visible) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-2xl bg-white rounded-xl shadow-lg p-6">
+        <h3 className="text-xl font-semibold mb-3">Confirmar Orden</h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+          <div>
+            <label className="block text-sm text-slate-600 mb-1">Mesa</label>
+            <select value={selectedMesa || ""} onChange={(e) => setSelectedMesa(Number(e.target.value))} className="w-full border rounded px-2 py-1">
+              <option value="">-- Seleccione mesa --</option>
+              {mesas.map((m) => (
+                <option key={m.id} value={m.id}>{m.nombre || `Mesa ${m.numero || m.id}`}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm text-slate-600 mb-1">Cliente</label>
+            <select value={selectedCliente || ""} onChange={(e) => setSelectedCliente(Number(e.target.value))} className="w-full border rounded px-2 py-1">
+              <option value="">-- Seleccione cliente --</option>
+              {clientes.map((c) => (
+                <option key={c.id} value={c.id}>{c.nombre }</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="mb-4">
+          <h4 className="font-medium">Resumen</h4>
+          <div className="max-h-40 overflow-auto mt-2 divide-y">
+            {items.map((it) => (
+              <div key={it.menu.id} className="py-2 flex justify-between items-center">
+                <div>
+                  <div className="font-medium">{it.menu.nombre}</div>
+                  <div className="text-sm text-slate-500">{it.cantidad} x ${Number(it.precio).toFixed(2)}</div>
+                </div>
+                <div className="font-semibold">${Number(it.subtotal).toFixed(2)}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-3 text-right font-bold text-lg">Total: ${Number(total).toFixed(2)}</div>
+        </div>
+
+        <div className="flex gap-2 justify-end">
+          <button onClick={onClose} className="px-4 py-2 rounded border">Cancelar</button>
+          <button onClick={handleConfirm} disabled={loading} className="px-4 py-2 rounded bg-blue-700 text-white">
+            {loading ? "Enviando..." : "Enviar a cocina"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ConfirmOrderModal;
+
+```
 
 
