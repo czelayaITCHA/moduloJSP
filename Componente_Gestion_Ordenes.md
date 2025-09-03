@@ -1,4 +1,5 @@
 # Componente Gestión de Ordenes
+## Requisitos del backend para crear componente de gestión de ordenes en el frontend
 
 ## 1.- Crear carpeta de ordenes dentro components, en el proyecto Orders-app (proyecto react), tal como se muestra en la siguiente imágen
 
@@ -348,5 +349,167 @@ export default ConfirmOrderModal;
 ```
 ### 4.4.- Crear MeseroView.jsx e intregar los componentes anteriores
 Aquí integro se todo: trae menús reales, permite agregar al carrito, editar cantidades, abrir modal y crear orden con createOrden. 
+### 4.5.- Crear componente OrdenesPage.jsx
+### 4.6 Crear una en el archivo App.jsx
+```JavaScript
+{
+   path: 'ordenes',
+   element: <OrdenesPage />
+}
+```
+### 4.7 Programar CocineroView.jsx
+Ahora creamos el componente CocineroView.jsx, que es la vista del *cocinero* para gestionar las órdenes en preparación.
 
+Este componente mostrará:
+
+1. Un listado de órdenes en estado CREADA o PREPARANDO.
+2. Detalles de cada orden (mesa, cliente, mesero, lista de productos).
+3. Botones de acción para cambiar estado:
+   * CREADA → PREPARANDO (cuando empieza a cocinar).
+   * PREPARANDO → LISTA (cuando la orden está lista para entregar).
+
+```JavaScript
+import React, { useEffect, useState } from "react";
+import axios from "axios";
+import { useAuth } from "../context/AuthContext";
+import { FaUtensils, FaCheckCircle } from "react-icons/fa";
+import { urlBase } from "../../utils/config";
+
+const CocineroView = () => {
+  const { token } = useAuth();
+  const [ordenes, setOrdenes] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  //  Obtenemos las órdenes pendientes
+  const fetchOrdenes = async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get(`${urlBase}ordenes/estado/CREADA`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const resProceso = await axios.get(`${urlBase}ordenes/estado/PREPARANDO`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      setOrdenes([...response.data, ...resProceso.data]);
+    } catch (err) {
+      console.error("Error cargando órdenes:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchOrdenes();
+  }, []);
+
+  // Cambiar estado de la orden
+  const cambiarEstado = async (orden, nuevoEstado) => {
+    try {
+      await axios.put(
+        `${urlBase}ordenes/cambiar-estado`,
+        { id: orden.id, estado: nuevoEstado },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      fetchOrdenes(); // Actualizamos listado de ordenes
+    } catch (err) {
+      console.error("Error cambiando estado:", err);
+    }
+  };
+
+  if (loading) {
+    return <p className="text-center text-gray-500">Cargando órdenes...</p>;
+  }
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {ordenes.length === 0 ? (
+        <p className="text-gray-500">No hay órdenes pendientes</p>
+      ) : (
+        ordenes.map((orden) => (
+          <div
+            key={orden.id}
+            className="bg-white shadow-lg rounded-2xl p-4 border border-gray-200"
+          >
+            {/* Encabezado */}
+            <div className="flex justify-between items-center mb-3">
+              <h2 className="text-lg font-bold text-blue-700">
+                Orden #: {orden.correlativo}
+              </h2>
+              <span
+                className={`px-3 py-1 text-sm rounded-full ${
+                  orden.estado === "CREADA"
+                    ? "bg-yellow-100 text-yellow-700"
+                    : "bg-blue-100 text-blue-700"
+                }`}
+              >
+                {orden.estado}
+              </span>
+            </div>
+
+            {/* Información */}
+            <p className="text-sm text-gray-600 mb-2">
+              <strong>Mesa:</strong> {orden.mesaDTO?.numero}
+            </p>
+            <p className="text-sm text-gray-600 mb-2">
+              <strong>Cliente:</strong> {orden.clienteDTO?.nombre}
+            </p>
+            <p className="text-sm text-gray-600 mb-4">
+              <strong>Mesero:</strong> {orden.usuarioDTO?.nombre}
+            </p>
+
+            {/* Detalle */}
+            <div className="bg-gray-50 rounded-lg p-3 mb-3">
+              <h3 className="font-semibold text-gray-700 mb-2">Menus / Productos:</h3>
+              <ul className="space-y-1">
+                {orden.detalleList.map((detalle) => (
+                  <li
+                    key={detalle.id}
+                    className="flex justify-between text-sm text-gray-700"
+                  >
+                    <span>
+                      {detalle.cantidad} x {detalle.menuDTO?.nombre}
+                    </span>
+                    <span>${Number(detalle.cantidad * detalle.precio).toFixed(2)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Total */}
+            <p className="text-right font-bold text-gray-800 mb-3">
+              Total: ${Number(orden.total).toFixed(2)}
+            </p>
+
+            {/* Botones */}
+            <div className="flex justify-end gap-2">
+              {orden.estado === "CREADA" && (
+                <button
+                  onClick={() => cambiarEstado(orden, "PREPARANDO")}
+                  className="flex items-center px-3 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600"
+                >
+                  <FaUtensils className="mr-2" /> Iniciar
+                </button>
+              )}
+
+              {orden.estado === "PREPARANDO" && (
+                <button
+                  onClick={() => cambiarEstado(orden, "LISTA")}
+                  className="flex items-center px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                >
+                  <FaCheckCircle className="mr-2" /> Marcar lista
+                </button>
+              )}
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+};  
+
+export default CocineroView;
+
+```
 
