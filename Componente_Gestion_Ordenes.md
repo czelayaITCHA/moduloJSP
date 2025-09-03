@@ -512,4 +512,6 @@ const CocineroView = () => {
 export default CocineroView;
 
 ```
+### 4.8 Programar componente CajeroView.jsx
 
+ 
