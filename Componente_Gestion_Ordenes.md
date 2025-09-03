@@ -347,5 +347,7 @@ const ConfirmOrderModal = ({ visible, onClose, items, total, onConfirm, token, f
 export default ConfirmOrderModal;
 
 ```
+### 4.4.- Crear MeseroView.jsx e intregar los componentes anteriores
+Aquí integro se todo: trae menús reales, permite agregar al carrito, editar cantidades, abrir modal y crear orden con createOrden. 
 
 
