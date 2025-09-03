@@ -31,31 +31,30 @@ import { urlBase } from "../../utils/config";
 
 const buildHeaders = (token) => ({
   headers: {
-    Authorization: token ? `Bearer ${token}` : "",
+    Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
   },
 });
 
 export const getMenus = async (token) => {
-  const res = await axios.get(`${urlBase}/menus`, buildHeaders(token));
-  return res.data;
+  const response = await axios.get(`${urlBase}menus`, buildHeaders(token));
+  return response.data;
 };
 
 export const getMesas = async (token) => {
-  const res = await axios.get(`${urlBase}/mesas`, buildHeaders(token));
-  return res.data;
+  const response = await axios.get(`${urlBase}mesas`, buildHeaders(token));
+  return response.data;
 };
 
 export const getClientes = async (token) => {
-  const res = await axios.get(`${urlBase}/clientes`, buildHeaders(token));
-  return res.data;
+  const response = await axios.get(`${urlBase}clientes`, buildHeaders(token));
+  return response.data;
 };
 
 export const createOrden = async (dto, token) => {
-  const res = await axios.post(`${url}/ordenes`, dto, buildHeaders(token));
-  return res.data;
+  const response = await axios.post(`${urlBase}ordenes`, dto, buildHeaders(token));
+  return response.data;
 };
-
 ```
 
 ## 4.- Crear componentes de las vistas de acuerdo al rol del usuario
