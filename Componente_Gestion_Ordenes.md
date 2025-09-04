@@ -1,5 +1,8 @@
 # Componente Gestión de Ordenes
 ## Requisitos del backend para crear componente de gestión de ordenes en el frontend
+1. Agregar los roles: ADMIN, MESERO/A, COCINERO Y CAJERO
+2. Insertar 4 usuarios con diferente rol, usar el endpoint api//auth/register
+3. Haber implementado los endpoints para obtener listado de mesas y clientes
 
 ## 1.- Crear carpeta de ordenes dentro components, en el proyecto Orders-app (proyecto react), tal como se muestra en la siguiente imágen
 
@@ -59,7 +62,9 @@ export const createOrden = async (dto, token) => {
 ```
 
 ## 4.- Crear componentes de las vistas de acuerdo al rol del usuario
-En la carpeta ordenes vamos a crear los archivos de los diferentes componentes para gestionar las ordenes, por el momento serán solo archivos con algun texto, luego se programará lógica real de cada componente
+En la carpeta ordenes vamos a crear los archivos de los diferentes componentes para gestionar las ordenes, serán componentes separados que se integrarán después en un solo componente. Cuando termine la creación de los componentes su estructura debe verse como la siguiente imagen:
+
+<img width="260" height="443" alt="image" src="https://github.com/user-attachments/assets/84cad721-989e-4688-b0cf-6ad190252226" />
 
 ### 4.1 Crear componente *MenuCard.jsx* 
 Este componente contendrá tarjeta del producto o menú con información como imagen, nombre, precio, cantidad, botón agregar
@@ -232,8 +237,13 @@ Modal para confirmar la orden: selecciona mesa y cliente (traídos del backend),
 
 ```JavaScript
 import React, { useEffect, useState } from "react";
+import { useAuth } from "../context/AuthContext";
+import Swal from "sweetalert2";
 
 const ConfirmOrderModal = ({ visible, onClose, items, total, onConfirm, token, fetchMesas, fetchClientes }) => {
+
+  const {user} = useAuth();
+  
   const [mesas, setMesas] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [selectedMesa, setSelectedMesa] = useState(null);
@@ -252,20 +262,20 @@ const ConfirmOrderModal = ({ visible, onClose, items, total, onConfirm, token, f
         console.error(e);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    
   }, [visible]);
 
   const handleConfirm = async () => {
     if (!selectedMesa || !selectedCliente) {
-      alert("Selecciona mesa y cliente antes de confirmar.");
+      Swal.fire("Advertencia!","Selecciona mesa y cliente antes de confirmar.","warning");
       return;
     }
+    //construimos el json como lo espera el backend
     const dto = {
-      // DTO shape similar a backend: clienteDTO, mesaDTO, usuarioDTO se setearán en backend según token,
-      // pero aquí mandamos lo mínimo requerido: cliente y mesa y detalleList
+      total: total,
       clienteDTO: { id: selectedCliente },
       mesaDTO: { id: selectedMesa },
-      total: total,
+      usuarioDTO: {id: user?.userId},
       detalleList: items.map((it) => ({
         menuDTO: { id: it.menu.id },
         cantidad: it.cantidad,
@@ -280,7 +290,7 @@ const ConfirmOrderModal = ({ visible, onClose, items, total, onConfirm, token, f
       onClose();
     } catch (err) {
       console.error(err);
-      alert("Error al crear la orden. Revisa la consola.");
+      Swal.fire("Error","Error al crear la orden. Revisa la consola.", "error");
     } finally {
       setLoading(false);
     }
@@ -348,7 +358,156 @@ export default ConfirmOrderModal;
 
 ```
 ### 4.4.- Crear MeseroView.jsx e intregar los componentes anteriores
-Aquí integro se todo: trae menús reales, permite agregar al carrito, editar cantidades, abrir modal y crear orden con createOrden. 
+Aquí se integra todo: trae menús / productos, permite agregar a la orden, editar cantidades, abrir modal y crear orden con createOrden. 
+```JavaScript
+import React, { useEffect, useMemo, useState } from "react";
+import { useAuth } from "../context/AuthContext";
+import MenuCard from "./MenuCard";
+import OrderCart from "./OrderCart";
+import ConfirmOrderModal from "./ConfirmOrderModal";
+import { getMenus, getMesas, getClientes, createOrden } from "../services/ordenService";
+import Swal from "sweetalert2";
+
+const MeseroView = () => {
+  const { token } = useAuth();
+  
+  const [menus, setMenus] = useState([]);
+  const [loadingMenus, setLoadingMenus] = useState(true);
+
+  // orden en construcción: array { menu, cantidad, precio, subtotal }
+  const [cart, setCart] = useState([]);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    const fetch = async () => {
+      setLoadingMenus(true);
+      try {
+        const data = await getMenus(token);
+        // aseguramos campos esperados
+        setMenus(Array.isArray(data) ? data.filter(m=>m.disponible !== false) : []);
+      } catch (e) {
+        console.error("Error al obtener menus", e);
+        setMenus([]);
+      } finally {
+        setLoadingMenus(false);
+      }
+    };
+    if (token) fetch();
+  }, [token]);
+
+  const addToCart = (menu, cantidad) => {
+    setCart((prev) => {
+      const exists = prev.find((p) => p.menu.id === menu.id);
+      if (exists) {
+        return prev.map((p) =>
+          p.menu.id === menu.id
+            ? {
+                ...p,
+                cantidad: p.cantidad + cantidad,
+                subtotal: Number(((p.cantidad + cantidad) * Number(menu.precioUnitario)).toFixed(2)),
+              }
+            : p
+        );
+      }
+      return [
+        ...prev,
+        {
+          menu,
+          cantidad,
+          precio: Number(menu.precioUnitario),
+          subtotal: Number((cantidad * Number(menu.precioUnitario)).toFixed(2)),
+        },
+      ];
+    });
+  };
+
+  const removeFromCart = (menuId) => {
+    setCart((prev) => prev.filter((p) => p.menu.id !== menuId));
+  };
+
+  const updateQty = (menuId, qty) => {
+    setCart((prev) =>
+      prev.map((p) =>
+        p.menu.id === menuId
+          ? { ...p, cantidad: qty, subtotal: Number((qty * Number(p.precio)).toFixed(2)) }
+          : p
+      )
+    );
+  };
+
+  const total = useMemo(() => cart.reduce((s, it) => s + Number(it.subtotal), 0), [cart]);
+
+  const handleConfirm = async (dto) => {
+    setIsSubmitting(true);
+    try {
+      // DTO que se envía al backend
+      const response = await createOrden(dto, token);
+      console.log("response", response)
+      Swal.fire("Registrado", response?.message, "success");
+      
+      // limpiar carrito (Orden)
+      setCart([]);
+    } catch (err) {
+      console.error(err);
+      const msg = err?.response?.data?.message || "Error al crear la orden";
+      Swal.fire("Error", msg, "error");
+      throw err;
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (loadingMenus) {
+    return <div className="p-6 text-center">Cargando menú...</div>;
+  }
+
+  return (
+    <div className="p-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Menú: ocupa 2/3 en pantallas grandes */}
+        <div className="lg:col-span-2">
+          <header className="flex items-center justify-between mb-4">
+            <h2 className="text-2xl font-bold text-slate-800">Menú</h2>
+            <div className="text-slate-600">Toca para agregar al pedido</div>
+          </header>
+
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            {menus.map((m) => (
+              <MenuCard key={m.id} menu={m} onAdd={addToCart} />
+            ))}
+          </div>
+        </div>
+
+        {/* Carrito o Orden */}
+        <div>
+          <OrderCart
+            items={cart}
+            onRemove={removeFromCart}
+            onUpdateQty={updateQty}
+            total={total}
+            onOpenConfirm={() => setIsConfirmOpen(true)}
+          />
+        </div>
+      </div>
+
+      <ConfirmOrderModal
+        visible={isConfirmOpen}
+        onClose={() => setIsConfirmOpen(false)}
+        items={cart}
+        total={total}
+        onConfirm={handleConfirm}
+        token={token}
+        fetchMesas={getMesas}
+        fetchClientes={getClientes}
+      />
+    </div>
+  );
+};
+
+export default MeseroView;
+
+```
 ### 4.5.- Crear componente OrdenesPage.jsx
 ### 4.6 Crear una en el archivo App.jsx
 ```JavaScript
