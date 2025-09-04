@@ -934,9 +934,8 @@ export default CajeroView;
 ### Nota importante, asegurarse de tener los siguientes ENUM en el Backend para el estados de ordenes y métodos de pago
 
 1. EstadoOrden
-   ```java
-   package com.devsoft.orders_api.utils;
-
+```Java
+package com.devsoft.orders_api.utils;
 public enum EstadoOrden {
     CREADA,
     CONFIRMADA,
@@ -946,10 +945,9 @@ public enum EstadoOrden {
     PAGADA,
     ANULADA
 }
-
-   ```
+```
 3. MetodoPago
-```java
+```Java
   package com.devsoft.orders_api.utils;
 
 public enum MetodoPago {
