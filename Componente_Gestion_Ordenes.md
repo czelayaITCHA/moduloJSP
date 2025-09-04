@@ -570,7 +570,7 @@ const OrdenesPage = () => {
 export default OrdenesPage;
 ```
   
-### 4.6 Crear una en el archivo App.jsx
+### 4.6 Crear ruta una en el archivo App.jsx
 ```JavaScript
 {
    path: 'ordenes',
