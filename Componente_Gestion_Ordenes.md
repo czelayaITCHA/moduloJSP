@@ -1,7 +1,7 @@
 # Componente Gestión de Ordenes
 ## Requisitos del backend para crear componente de gestión de ordenes en el frontend
 1. Agregar los roles: ADMIN, MESERO/A, COCINERO Y CAJERO
-2. Insertar 4 usuarios con diferente rol, usar el endpoint api//auth/register
+2. Insertar 4 usuarios con diferente rol, usar el endpoint api/auth/register
 3. Haber implementado los endpoints para obtener listado de mesas y clientes
 
 ## 1.- Crear carpeta de ordenes dentro components, en el proyecto Orders-app (proyecto react), tal como se muestra en la siguiente imágen
