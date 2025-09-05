@@ -996,8 +996,9 @@ public class Pago implements Serializable {
     private Orden orden;
 }
 ```
-### 5.2 Crear repository, service y controllador
-* Repository
+### 5.2 Crear repository, service y controlador
+Repository
+
   ```Java
 package com.devsoft.orders_api.repository;
 
@@ -1009,5 +1010,297 @@ import org.springframework.stereotype.Repository;
 public interface PagoRepository extends JpaRepository<Pago, Long> {
 }
   ```
-* Service
-* Controller
+Service
+```Java
+package com.devsoft.orders_api.services;
+
+import com.devsoft.orders_api.entities.Pago;
+import com.devsoft.orders_api.repository.PagoRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class PagoService {
+    @Autowired
+    private PagoRepository pagoRepository;
+
+    public Pago registrarPago(Pago pago){
+        return pagoRepository.save(pago);
+    }
+    public List<Pago> getAll(){
+        return pagoRepository.findAll();
+    }
+    public Pago findById(Long id){
+        return pagoRepository.findById(id).orElse(null);
+    }
+}
+```
+Controller
+
+```Java
+package com.devsoft.orders_api.controllers;
+
+import com.devsoft.orders_api.entities.Pago;
+import com.devsoft.orders_api.services.PagoService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@CrossOrigin
+@RequestMapping("/api")
+public class PagoController {
+    @Autowired
+    private PagoService pagoService;
+
+    @GetMapping("/pagos")
+    public ResponseEntity<?> getAll(){
+        List<Pago> pagos = pagoService.getAll();
+        return ResponseEntity.ok(pagos);
+    }
+
+    @GetMapping("/pagos/{id}")
+    public ResponseEntity<?> getById(@PathVariable Long id){
+        Pago pago = null;
+        Map<String, Object> response = new HashMap<>();
+        try{
+            pago = pagoService.findById(id);
+        }catch (DataAccessException e){
+            response.put("message", "Error al realizar la consulta a la base de datos");
+            response.put("error", e.getMessage());
+            return new ResponseEntity<Map<String,Object>>(response, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+        if(pago == null){
+            response.put("message", "El pago con ID: ".concat(id.toString())
+                    .concat(" no existe en la base de datos"));
+            return new ResponseEntity<Map<String, Object>>(response, HttpStatus.NOT_FOUND);
+        }
+        return new ResponseEntity<Pago>(pago, HttpStatus.OK);
+    }
+
+    @PostMapping("/pagos")
+    public ResponseEntity<?> save(@RequestBody Pago pago){
+        Pago pagoPersisted = null;
+        Map<String, Object> response = new HashMap<>();
+        try{
+
+            pagoPersisted = pagoService.registrarPago(pago);
+            response.put("message","Pago registrado correctamente...!");
+            response.put("pago", pagoPersisted);
+            return new ResponseEntity<Map<String,Object>>(response, HttpStatus.CREATED);
+        }catch(DataAccessException e){
+            response.put("message", "Error al insertar el registro, intente de nuevo");
+            response.put("error", e.getMessage());
+            return new ResponseEntity<Map<String,Object>>(response, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+}
+```
+## 6 Actualizar el componente CajeroView
+
+```Java
+import React, { useState, useEffect, useRef } from "react";
+import axios from "axios";
+import { Dialog } from "primereact/dialog";
+import { Dropdown } from "primereact/dropdown";
+import { Button } from "primereact/button";
+import { InputNumber } from "primereact/inputnumber";
+import { Card } from "primereact/card";
+import { Toast } from "primereact/toast";
+import { urlBase } from "../../utils/config";
+import { useAuth } from "../context/AuthContext";
+
+const CajeroView = () => {
+  const { token } = useAuth();
+  const [ordenes, setOrdenes] = useState([]);
+  const [selectedOrden, setSelectedOrden] = useState(null);
+  const [showPago, setShowPago] = useState(false);
+  const [montoRecibido, setMontoRecibido] = useState(null);
+  const [metodoPago, setMetodoPago] = useState("EFECTIVO");
+
+  const toast = useRef(null);
+
+  useEffect(() => {
+    fetchOrdenes();
+  }, []);
+
+  const fetchOrdenes = async () => {
+    try {
+      const response = await axios.get(`${urlBase}ordenes/estado/LISTA`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setOrdenes(response.data);
+    } catch (err) {
+      console.error("Error cargando órdenes", err);
+      toast.current?.show({
+        severity: "error",
+        summary: "Error",
+        detail: "No se pudieron cargar las órdenes",
+        life: 3000,
+      });
+    }
+  };
+
+  const calcularCambio = () => {
+    if (!montoRecibido || !selectedOrden) return 0;
+    return (montoRecibido - selectedOrden.total).toFixed(2);
+  };
+
+  const registrarPago = async () => {
+    if (!montoRecibido || montoRecibido < selectedOrden.total) {
+      toast.current?.show({
+        severity: "warn",
+        summary: "Monto inválido",
+        detail: "El monto recibido no puede ser menor al total.",
+        life: 3000,
+      });
+      return;
+    }
+
+    try {
+      const pago = {
+        fechaPago: new Date().toISOString().split("T")[0],
+        orden: { id: selectedOrden.id },
+        monto: selectedOrden.total,
+        metodo: metodoPago,
+        recibido: montoRecibido,
+        cambio: calcularCambio(),
+      };
+
+      await axios.post(`${urlBase}pagos`, pago, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      await axios.put(
+        `${urlBase}ordenes/cambiar-estado`,
+        { id: selectedOrden.id, estado: "PAGADA" },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      setShowPago(false);
+      setMontoRecibido(null);
+      fetchOrdenes();
+
+      toast.current?.show({
+        severity: "success",
+        summary: "Pago registrado",
+        detail: `La orden #${selectedOrden.correlativo} fue pagada con éxito`,
+        life: 4000,
+      });
+    } catch (err) {
+      console.error("Error registrando pago", err);
+      toast.current?.show({
+        severity: "error",
+        summary: "Error",
+        detail: "No se pudo registrar el pago",
+        life: 4000,
+      });
+    }
+  };
+
+  return (
+    <div>
+      <Toast ref={toast} />
+
+      <h2 className="text-xl font-semibold text-blue-700 mb-4">
+        Cajero - Cobro de Órdenes
+      </h2>
+
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {ordenes.map((orden) => (
+          <Card
+            key={orden.id}
+            title={`Orden #: ${orden.correlativo}`}
+            subTitle={`Cliente: ${orden.clienteDTO?.nombre || "N/A"}`}
+            className="shadow-lg"
+          >
+            <p>
+              <b>Mesa:</b> {orden.mesaDTO?.numero}
+            </p>
+            <div className="mt-3">
+              <p className="font-semibold">Detalle de la Orden:</p>
+              <ul className="text-sm list-disc pl-5">
+                {orden.detalleList?.map((d) => (
+                  <li key={d.id}>
+                    {d.cantidad} x {d.menuDTO?.nombre} - $
+                    {Number(d.cantidad * d.precio).toFixed(2)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <p>
+              <b className="font-semibold">Total:</b>{" "}
+              <b className="font-extrabold text-3xl text-blue-600">
+                ${orden.total.toFixed(2)}
+              </b>
+            </p>
+
+            <Button
+              label="Registrar Pago"
+              icon="pi pi-dollar"
+              className="p-button-success mt-3"
+              onClick={() => {
+                setSelectedOrden(orden);
+                setShowPago(true);
+              }}
+            />
+          </Card>
+        ))}
+      </div>
+
+      <Dialog
+        header="Registrar Pago"
+        visible={showPago}
+        style={{ width: "400px" }}
+        modal
+        onHide={() => setShowPago(false)}
+      >
+        {selectedOrden && (
+          <div className="space-y-4">
+            <p>
+              <b>Total a pagar:</b> ${selectedOrden.total.toFixed(2)}
+            </p>
+            <Dropdown
+              value={metodoPago}
+              options={["EFECTIVO", "TARJETA", "TRANSFERENCIA"]}
+              onChange={(e) => setMetodoPago(e.value)}
+              placeholder="Seleccione método"
+              className="w-full"
+            />
+            <InputNumber
+              value={montoRecibido}
+              onValueChange={(e) => setMontoRecibido(e.value)}
+              mode="currency"
+              currency="USD"
+              locale="es-SV"
+              placeholder="Monto recibido"
+              className="w-full"
+            />
+            <p>
+              <b>Cambio:</b> ${calcularCambio()}
+            </p>
+            <Button
+              label="Confirmar Pago"
+              icon="pi pi-check"
+              className="p-button-success w-full"
+              onClick={registrarPago}
+            />
+          </div>
+        )}
+      </Dialog>
+    </div>
+  );
+};
+
+export default CajeroView;
+
+```
