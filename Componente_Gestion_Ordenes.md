@@ -1105,7 +1105,7 @@ public class PagoController {
 
 }
 ```
-## 6 Actualizar el componente CajeroView
+## 6 Actualizar el componente CajeroView.jsx
 
 ```Java
 import React, { useState, useEffect, useRef } from "react";
