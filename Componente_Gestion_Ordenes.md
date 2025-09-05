@@ -956,3 +956,58 @@ public enum MetodoPago {
     TRANSFERENCIA
 }
 ``` 
+## 5 Crear elementos en el proyecto backend para el registro de pagos
+### 5.1 Crear entidad para registro de pagos
+```Java
+package com.devsoft.orders_api.entities;
+
+import com.devsoft.orders_api.utils.MetodoPago;
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.io.Serial;
+import java.io.Serializable;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Entity
+@Table(name = "pagos", schema = "public", catalog = "orders")
+public class Pago implements Serializable {
+    @Serial
+    private static final long serialVersionUID = 1L;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    @Column(name = "fecha_pago", nullable = false)
+    private LocalDate fechaPago;
+    @Column(name = "monto", precision = 10, scale = 2)
+    private BigDecimal monto;
+    @Enumerated(EnumType.STRING)
+    private MetodoPago metodo; // EFECTIVO, TARJETA, TRANSFERENCIA
+    @ManyToOne
+    @JoinColumn(name = "orden_id", nullable = false)
+    private Orden orden;
+}
+```
+### 5.2 Crear repository, service y controllador
+* Repository
+  ```Java
+package com.devsoft.orders_api.repository;
+
+import com.devsoft.orders_api.entities.Pago;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public interface PagoRepository extends JpaRepository<Pago, Long> {
+}
+  ```
+* Service
+* Controller
