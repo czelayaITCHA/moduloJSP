@@ -1,5 +1,6 @@
 # Reporte de Ingesos usando libreria itextpdf
-Indrodución
+* Indrodución
+En este documento se desarrolla el proceso paso a paso para elaborar y reporte (pdf) con la libreria open source *iTextpdf*, existe otras alternativas como Jasper Report, pero en esta ocasión se usará iTextpdf
 
 ## 1. Instalación de dependencia itextpdf
 Editar el archivo pom.xml y agregar dependencia, como se muestra a continucaión 
